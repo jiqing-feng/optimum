@@ -201,15 +201,14 @@ class GPTQQuantizer(object):
                 )
         self.exllama_version = self.exllama_config["version"]
 
-    def select_quant_linear(self, device, pack: bool):
+    def select_quant_linear(self, pack: bool):
         if is_gptqmodel_available():
-            backend = BACKEND.IPEX if device.type == "cpu" else BACKEND.AUTO
             self.quant_linear = hf_select_quant_linear(
                 bits=self.bits,
                 group_size=self.group_size,
                 desc_act=self.desc_act,
                 sym=self.sym, pack=pack,
-                backend=backend,
+                backend=self.backend,
             )
         else:
             self.quant_linear = hf_select_quant_linear(
@@ -244,7 +243,7 @@ class GPTQQuantizer(object):
         """
         return cls(**config_dict)
 
-    def convert_model(self, model: nn.Module):
+    def convert_model(self, model: nn.Module, **kwargs):
         """
         Convert the model to a GPTQ model by getting and replacing the layers.
 
@@ -253,6 +252,8 @@ class GPTQQuantizer(object):
                 Model to be converted
 
         """
+        self.select_gptqmodel_backend(kwargs)
+
         if self.block_name_to_quantize is None:
             self.block_name_to_quantize = get_block_name_with_pattern(model)
         block_name = self.block_name_to_quantize
@@ -266,10 +267,22 @@ class GPTQQuantizer(object):
                     )
                     del layers_to_be_replaced[name]
 
-        self.select_quant_linear(get_device(model), pack=False)
+        self.select_quant_linear(pack=False)
 
         self._replace_by_quant_layers(model, layers_to_be_replaced)
         return model
+
+    def quantize_preprocess(self, model, **kwargs):
+        self.select_gptqmodel_backend(kwargs)
+
+    def select_gptqmodel_backend(self, kwargs):
+        if is_gptqmodel_available():
+            self.backend = BACKEND.AUTO
+            if kwargs.get("device_map") is not None and kwargs.get("device_map") != "auto":
+                device_map = kwargs.get("device_map")
+                devices =  [device_map] if isinstance(device_map, str) else list(device_map.values())
+                if "cpu" in devices or torch.device("cpu") in devices:
+                    self.backend = BACKEND.IPEX
 
     def get_no_split_module_classes(self, model):
         """
@@ -646,7 +659,7 @@ class GPTQQuantizer(object):
             torch.xpu.empty_cache()
         return model
 
-    def post_init_model(self, model):
+    def post_init_model(self, model, **kwargs):
         """
         Post-initialization that require device information, for example buffers initialization on device.
 
@@ -675,8 +688,7 @@ class GPTQQuantizer(object):
             if self.checkpoint_format is None:
                 # default value of checkpoint_format is gptq
                 self.checkpoint_format = "gptq"
-
-            if self.checkpoint_format == "gptq":
+            if self.checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
                 from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
                 model = convert_gptq_v1_to_v2_format(model, model.quantize_config, self.quant_linear)
 
@@ -709,7 +721,7 @@ class GPTQQuantizer(object):
         layers = get_layers(model)
         layers = {n: layers[n] for n in quantizers}
 
-        self.select_quant_linear(device, pack=True)
+        self.select_quant_linear(pack=True)
 
         self._replace_by_quant_layers(model, quantizers)
         qlayers = get_layers(model, [self.quant_linear])
@@ -853,7 +865,7 @@ def load_quantized_model(
     quantizer.exllama_version = quantizer.exllama_config["version"]
     quantizer.max_input_length = max_input_length
 
-    model = quantizer.convert_model(model)
+    model = quantizer.convert_model(model, device_map=device_map)
 
     if no_split_module_classes is None:
         no_split_module_classes = quantizer.get_no_split_module_classes(model)
