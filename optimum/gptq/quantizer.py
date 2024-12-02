@@ -662,9 +662,12 @@ class GPTQQuantizer(object):
         model.quantize_config.bits = self.bits
         model.quantize_config.desc_act = self.desc_act
 
-
         if is_gptqmodel_available():
-            if self.checkpoint_format is not None and self.checkpoint_format == "gptq":
+            if self.checkpoint_format is None:
+                # default value of checkpoint_format is gptq
+                self.checkpoint_format = "gptq"
+
+            if self.checkpoint_format == "gptq":
                 from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
                 model = convert_gptq_v1_to_v2_format(model, model.quantize_config, self.quant_linear)
 
