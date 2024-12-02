@@ -49,7 +49,7 @@ if is_auto_gptq_available():
 
 
 if is_gptqmodel_available():
-    from gptqmodel import exllama_set_max_input_length
+    from gptqmodel import exllama_set_max_input_length, BACKEND
     from gptqmodel.quantization import GPTQ
     from gptqmodel.utils.importer import hf_select_quant_linear
     from gptqmodel.utils.model import gptqmodel_post_init as gptq_post_init
@@ -201,9 +201,15 @@ class GPTQQuantizer(object):
                 )
         self.exllama_version = self.exllama_config["version"]
 
+    def select_quant_linear(self, device, pack: bool):
         if is_gptqmodel_available():
+            backend = BACKEND.IPEX if device.type == "cpu" else BACKEND.AUTO
             self.quant_linear = hf_select_quant_linear(
-                bits=self.bits, group_size=self.group_size, desc_act=self.desc_act, sym=self.sym
+                bits=self.bits,
+                group_size=self.group_size,
+                desc_act=self.desc_act,
+                sym=self.sym, pack=pack,
+                backend=backend,
             )
         else:
             self.quant_linear = hf_select_quant_linear(
@@ -259,6 +265,9 @@ class GPTQQuantizer(object):
                         f"Quantization disabled for {name} (only modules_in_block_to_quantize={self.modules_in_block_to_quantize} are quantized)"
                     )
                     del layers_to_be_replaced[name]
+
+        self.select_quant_linear(get_device(model), pack=False)
+
         self._replace_by_quant_layers(model, layers_to_be_replaced)
         return model
 
@@ -621,7 +630,7 @@ class GPTQQuantizer(object):
                 )
                 self.disable_exllama = True
         # Step 4: Pack the model at the end (Replacing the layers)
-        self.pack_model(model=model, quantizers=quantizers)
+        self.pack_model(model=model, device=device, quantizers=quantizers)
 
         model.is_quantized = True
         model.quantization_method = QuantizationMethod.GPTQ
@@ -681,6 +690,7 @@ class GPTQQuantizer(object):
     def pack_model(
         self,
         model: nn.Module,
+        device: torch.device,
         quantizers: Dict[str, Tuple],
     ):
         """
@@ -695,6 +705,9 @@ class GPTQQuantizer(object):
         logger.info("Packing model...")
         layers = get_layers(model)
         layers = {n: layers[n] for n in quantizers}
+
+        self.select_quant_linear(device, pack=True)
+
         self._replace_by_quant_layers(model, quantizers)
         qlayers = get_layers(model, [self.quant_linear])
         for name in qlayers:
