@@ -205,7 +205,8 @@ class GPTQQuantizer(object):
                 bits=self.bits,
                 group_size=self.group_size,
                 desc_act=self.desc_act,
-                sym=self.sym, pack=pack,
+                sym=self.sym, 
+                pack=pack,
                 backend=self.backend,
             )
         else:
@@ -225,7 +226,9 @@ class GPTQQuantizer(object):
         gptq_dict = {}
         for key in self.serialization_keys:
             gptq_dict[key] = getattr(self, key)
-        gptq_dict["checkpoint_format"] = "gptq_v2"
+
+        # always save/pack to gptq_v1 format
+        gptq_dict["checkpoint_format"] = "gptq"
         return gptq_dict
 
     @classmethod
@@ -686,8 +689,7 @@ class GPTQQuantizer(object):
             quantization_config = model.config.quantization_config
             checkpoint_format = quantization_config.checkpoint_format if isinstance(model.config.quantization_config, GPTQConfig) else quantization_config.get("checkpoint_format")
             if checkpoint_format is None:
-                # default value of checkpoint_format is gptq
-                checkpoint_format = "gptq"
+                checkpoint_format = "gptq" # default checkpoint_format for both gptqmodel and auto-gptq(main)
             if checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
                 from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
                 model = convert_gptq_v1_to_v2_format(model, model.quantize_config, self.quant_linear)
