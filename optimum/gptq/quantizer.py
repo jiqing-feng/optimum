@@ -25,7 +25,7 @@ from torch import nn
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer
 from transformers.pytorch_utils import Conv1D
-from transformers.utils.quantization_config import QuantizationMethod
+from transformers.utils.quantization_config import QuantizationMethod, GPTQConfig
 
 from ..utils import is_accelerate_available, is_auto_gptq_available, is_gptqmodel_available
 from ..utils.modeling_utils import recurse_getattr
@@ -95,7 +95,6 @@ class GPTQQuantizer(object):
         max_input_length: Optional[int] = None,
         cache_block_outputs: Optional[bool] = True,
         modules_in_block_to_quantize: Optional[List[List[str]]] = None,
-        checkpoint_format: Optional[str] = None,
         *args,
         **kwargs,
     ):
@@ -168,7 +167,6 @@ class GPTQQuantizer(object):
         self.quant_method = QuantizationMethod.GPTQ
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
-        self.checkpoint_format = checkpoint_format
 
         self.serialization_keys = [
             "bits",
@@ -227,6 +225,7 @@ class GPTQQuantizer(object):
         gptq_dict = {}
         for key in self.serialization_keys:
             gptq_dict[key] = getattr(self, key)
+        gptq_dict["checkpoint_format"] = "gptq_v2"
         return gptq_dict
 
     @classmethod
@@ -683,12 +682,13 @@ class GPTQQuantizer(object):
         model.quantize_config = StoreAttr()
         model.quantize_config.bits = self.bits
         model.quantize_config.desc_act = self.desc_act
-
-        if is_gptqmodel_available():
-            if self.checkpoint_format is None:
+        if is_gptqmodel_available() and hasattr(model.config, "quantization_config"):
+            quantization_config = model.config.quantization_config
+            checkpoint_format = quantization_config.checkpoint_format if isinstance(model.config.quantization_config, GPTQConfig) else quantization_config.get("checkpoint_format")
+            if checkpoint_format is None:
                 # default value of checkpoint_format is gptq
-                self.checkpoint_format = "gptq"
-            if self.checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
+                checkpoint_format = "gptq"
+            if checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
                 from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
                 model = convert_gptq_v1_to_v2_format(model, model.quantize_config, self.quant_linear)
 
