@@ -95,6 +95,7 @@ class GPTQQuantizer(object):
         max_input_length: Optional[int] = None,
         cache_block_outputs: Optional[bool] = True,
         modules_in_block_to_quantize: Optional[List[List[str]]] = None,
+        checkpoint_format: Optional[str] = None,
         *args,
         **kwargs,
     ):
@@ -167,6 +168,7 @@ class GPTQQuantizer(object):
         self.quant_method = QuantizationMethod.GPTQ
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
+        self.checkpoint_format = checkpoint_format
 
         self.serialization_keys = [
             "bits",
@@ -198,6 +200,20 @@ class GPTQQuantizer(object):
                     f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {version}"
                 )
         self.exllama_version = self.exllama_config["version"]
+
+        if is_gptqmodel_available():
+            self.quant_linear = hf_select_quant_linear(
+                bits=self.bits, group_size=self.group_size, desc_act=self.desc_act, sym=self.sym
+            )
+        else:
+            self.quant_linear = hf_select_quant_linear(
+                use_triton=False,
+                desc_act=self.desc_act,
+                group_size=self.group_size,
+                bits=self.bits,
+                disable_exllama=self.disable_exllama or self.exllama_version != ExllamaVersion.ONE,
+                disable_exllamav2=self.disable_exllama or self.exllama_version != ExllamaVersion.TWO,
+            )
 
     def to_dict(self):
         """
@@ -270,20 +286,7 @@ class GPTQQuantizer(object):
             name (`str`, defaults to `""`):
                 To keep track of the name of the current module
         """
-        if is_gptqmodel_available():
-            QuantLinear = hf_select_quant_linear(
-                bits=self.bits, group_size=self.group_size, desc_act=self.desc_act, sym=self.sym
-            )
-        else:
-            QuantLinear = hf_select_quant_linear(
-                use_triton=False,
-                desc_act=self.desc_act,
-                group_size=self.group_size,
-                bits=self.bits,
-                disable_exllama=self.disable_exllama or self.exllama_version != ExllamaVersion.ONE,
-                disable_exllamav2=self.disable_exllama or self.exllama_version != ExllamaVersion.TWO,
-            )
-        if isinstance(module, QuantLinear):
+        if isinstance(module, self.quant_linear):
             return
         for attr in dir(module):
             layer = getattr(module, attr)
@@ -302,7 +305,7 @@ class GPTQQuantizer(object):
                     out_features = layer.weight.shape[1]
                 bias = layer.bias is not None
                 if is_gptqmodel_available():
-                    new_layer = QuantLinear(
+                    new_layer = self.quant_linear(
                         self.bits,
                         self.group_size,
                         self.desc_act,
@@ -314,7 +317,7 @@ class GPTQQuantizer(object):
                     )
                 else:
                     if not (self.desc_act) or self.group_size == -1:
-                        new_layer = QuantLinear(
+                        new_layer = self.quant_linear(
                             self.bits,
                             self.group_size,
                             in_features,
@@ -324,7 +327,7 @@ class GPTQQuantizer(object):
                             weight_dtype=layer.weight.dtype,
                         )
                     else:
-                        new_layer = QuantLinear(
+                        new_layer = self.quant_linear(
                             self.bits,
                             self.group_size,
                             in_features,
@@ -656,7 +659,16 @@ class GPTQQuantizer(object):
             pass
 
         model.quantize_config = StoreAttr()
+        model.quantize_config.bits = self.bits
         model.quantize_config.desc_act = self.desc_act
+
+
+        if is_gptqmodel_available():
+            if self.checkpoint_format is not None and self.checkpoint_format == "gptq":
+                from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
+                model = convert_gptq_v1_to_v2_format(model, model.quantize_config, self.quant_linear)
+
+
         model = gptq_post_init(model, use_act_order=self.desc_act)
         if (
             self.desc_act
@@ -680,24 +692,11 @@ class GPTQQuantizer(object):
             quantizers (`Dict[str,Tuple]`):
                 A mapping of the layer name and the data needed to pack the layer
         """
-        if is_gptqmodel_available():
-            QuantLinear = hf_select_quant_linear(
-                bits=self.bits, group_size=self.group_size, desc_act=self.desc_act, sym=self.sym
-            )
-        else:
-            QuantLinear = hf_select_quant_linear(
-                use_triton=False,
-                desc_act=self.desc_act,
-                group_size=self.group_size,
-                bits=self.bits,
-                disable_exllama=self.disable_exllama or self.exllama_version != ExllamaVersion.ONE,
-                disable_exllamav2=self.disable_exllama or self.exllama_version != ExllamaVersion.TWO,
-            )
         logger.info("Packing model...")
         layers = get_layers(model)
         layers = {n: layers[n] for n in quantizers}
         self._replace_by_quant_layers(model, quantizers)
-        qlayers = get_layers(model, [QuantLinear])
+        qlayers = get_layers(model, [self.quant_linear])
         for name in qlayers:
             logger.info(name)
             quantizers[name], scale, zero, g_idx = quantizers[name]
