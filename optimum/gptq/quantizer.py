@@ -398,6 +398,9 @@ class GPTQQuantizer(object):
         if self.sym == False and not is_gptqmodel_available():
             raise ValueError("sym=False is not supported with auto-gptq. Please use gptqmodel instead: `pip install gptqmodel`")
 
+        if self.checkpoint_format == "gptq_v2" and not is_gptqmodel_available():
+            raise ValueError("gptq_v2 format is not supported with auto-gptq. Please use gptqmodel instead: `pip install gptqmodel`")
+
         model.eval()
 
         # If using gptqmodel, default format is gptq_v2 for sym=False compatibility
@@ -662,10 +665,19 @@ class GPTQQuantizer(object):
         # Step 5: Any post-initialization that require device information, for example buffers initialization on device.
         model = self.post_init_model(model)
 
-        # for compatibility, always save in gptq_v1 format
-        if is_gptqmodel_available() and self.checkpoint_format == "gptq_v2" and self.backend != BACKEND.IPEX:
+        # gptqmodel default format is gptq_v2, need convert to gptq for production compatibility
+        if (is_gptqmodel_available()
+                and self.backend != BACKEND.IPEX
+                and self.sym != False # if sym=False, keep gptq_v2 format
+                and self.checkpoint_format == "gptq_v2"):
+
             from gptqmodel.utils.model import convert_gptq_v2_to_v1_format
             model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
+
+        if not self.sym:
+            # if sym=False, we need to use gptq_v2 format for avoid loading errors
+            self.checkpoint_format = "gptq_v2"
+        else:
             # back to gptq
             self.checkpoint_format = "gptq"
 
