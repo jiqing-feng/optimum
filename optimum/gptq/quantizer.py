@@ -50,7 +50,7 @@ if is_gptqmodel_available():
     from gptqmodel import exllama_set_max_input_length, BACKEND
     from gptqmodel.quantization import GPTQ
     from gptqmodel.utils.importer import hf_select_quant_linear
-    from gptqmodel.utils.model import gptqmodel_post_init as gptq_post_init
+    from gptqmodel.utils.model import hf_gptqmodel_post_init as gptq_post_init
 
 logger = getLogger(__name__)
 
@@ -669,7 +669,7 @@ class GPTQQuantizer(object):
         # convert gptqmodel internal gptq_v2 format to v1 for saving/compat
         # if sym=False, need to use gptq_v2 format for avoid loading errors
         if self.sym != False and self.checkpoint_format == "gptq_v2":
-            from gptqmodel.utils.model import convert_gptq_v2_to_v1_format
+            from gptqmodel.utils.model import hf_convert_gptq_v2_to_v1_format
             model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
             self.checkpoint_format = "gptq"
 
@@ -700,7 +700,7 @@ class GPTQQuantizer(object):
             pass
 
         if is_gptqmodel_available() and self.checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
-            from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
+            from gptqmodel.utils.model import hf_convert_gptq_v1_to_v2_format
             model = convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear)
 
         model.quantize_config = StoreAttr()
