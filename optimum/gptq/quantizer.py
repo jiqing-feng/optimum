@@ -25,7 +25,7 @@ from torch import nn
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer
 from transformers.pytorch_utils import Conv1D
-from transformers.utils.quantization_config import QuantizationMethod, GPTQConfig
+from transformers.utils.quantization_config import QuantizationMethod
 
 from ..utils import is_accelerate_available, is_auto_gptq_available, is_gptqmodel_available
 from ..utils.modeling_utils import recurse_getattr
@@ -199,15 +199,15 @@ class GPTQQuantizer(object):
                 )
         self.exllama_version = self.exllama_config["version"]
 
-    def select_quant_linear(self, pack: bool):
+    def select_quant_linear(self, pack: bool, device_map: str):
         if is_gptqmodel_available():
             self.quant_linear = hf_select_quant_linear(
                 bits=self.bits,
                 group_size=self.group_size,
                 desc_act=self.desc_act,
                 sym=self.sym,
+                device_map=device_map,
                 pack=pack,
-                backend=self.backend,
             )
         else:
             self.quant_linear = hf_select_quant_linear(
@@ -226,7 +226,6 @@ class GPTQQuantizer(object):
         gptq_dict = {}
         for key in self.serialization_keys:
             gptq_dict[key] = getattr(self, key)
-
         return gptq_dict
 
     @classmethod
@@ -243,7 +242,7 @@ class GPTQQuantizer(object):
         """
         return cls(**config_dict)
 
-    def convert_model(self, model: nn.Module):
+    def convert_model(self, model: nn.Module, **kwargs):
         """
         Convert the model to a GPTQ model by getting and replacing the layers.
 
@@ -265,23 +264,11 @@ class GPTQQuantizer(object):
                     )
                     del layers_to_be_replaced[name]
 
-        self.select_quant_linear(pack=False)
+        self.select_quant_linear(pack=False, device_map=kwargs.get("device_map", None))
 
         self._replace_by_quant_layers(model, layers_to_be_replaced)
 
         return model
-
-    def quantize_preprocess(self, model, **kwargs):
-        self.select_gptqmodel_backend(kwargs)
-
-    def select_gptqmodel_backend(self, kwargs):
-        if is_gptqmodel_available():
-            self.backend = BACKEND.AUTO
-            if kwargs.get("device_map") is not None and kwargs.get("device_map") != "auto":
-                device_map = kwargs.get("device_map")
-                devices = [device_map] if isinstance(device_map, str) else list(device_map.values())
-                if "cpu" in devices or torch.device("cpu") in devices:
-                    self.backend = BACKEND.IPEX
 
     def get_no_split_module_classes(self, model):
         """
@@ -668,7 +655,7 @@ class GPTQQuantizer(object):
         # if sym=False, need to use gptq_v2 format for avoid loading errors
         if self.sym != False and self.checkpoint_format == "gptq_v2":
             from gptqmodel.utils.model import hf_convert_gptq_v2_to_v1_format
-            model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
+            model = hf_convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
             self.checkpoint_format = "gptq"
 
         torch.cuda.empty_cache()
@@ -699,7 +686,7 @@ class GPTQQuantizer(object):
 
         if is_gptqmodel_available() and self.checkpoint_format == "gptq":
             from gptqmodel.utils.model import hf_convert_gptq_v1_to_v2_format
-            model = convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear)
+            model = hf_convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear)
 
         model.quantize_config = StoreAttr()
         model.quantize_config.desc_act = self.desc_act
@@ -730,7 +717,7 @@ class GPTQQuantizer(object):
         layers = get_layers(model)
         layers = {n: layers[n] for n in quantizers}
 
-        self.select_quant_linear(pack=True)
+        self.select_quant_linear(pack=True, device_map=model.hf_device_map)
 
         self._replace_by_quant_layers(model, quantizers)
         qlayers = get_layers(model, [self.quant_linear])
