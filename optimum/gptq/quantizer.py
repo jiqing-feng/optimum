@@ -666,12 +666,10 @@ class GPTQQuantizer(object):
         # Step 5: Any post-initialization that require device information, for example buffers initialization on device.
         model = self.post_init_model(model)
 
-        # need convert to gptq if format is gptq_v2 for production compatibility
+        # convert gptqmodel internal gptq_v2 format to v1 for saving/compat
         if self.checkpoint_format == "gptq_v2":
             from gptqmodel.utils.model import convert_gptq_v2_to_v1_format
             model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
-
-            # back to gptq
             self.checkpoint_format = "gptq"
 
         torch.cuda.empty_cache()
