@@ -663,6 +663,8 @@ class GPTQQuantizer(object):
         if is_gptqmodel_available() and self.checkpoint_format == "gptq_v2" and self.backend != BACKEND.IPEX:
             from gptqmodel.utils.model import convert_gptq_v2_to_v1_format
             model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
+            # back to gptq
+            self.checkpoint_format = "gptq"
 
         torch.cuda.empty_cache()
         if hasattr(torch, "xpu"):
