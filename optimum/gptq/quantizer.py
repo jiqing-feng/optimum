@@ -385,26 +385,27 @@ class GPTQQuantizer(object):
 
         if not is_auto_gptq_available() and not is_gptqmodel_available():
             raise RuntimeError(
-                "gptqmodel or auto-gptq is required in order to perform quantzation : `pip install gptqmodel` or `pip install auto-gptq`"
+                "gptqmodel or auto-gptq is required in order to perform gptq quantzation: `pip install gptqmodel` or `pip install auto-gptq`"
             )
 
         gptq_supports_cpu = (
                                     is_auto_gptq_available()
                                     and version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
                             ) or is_gptqmodel_available()
+        
         if not gptq_supports_cpu and not torch.cuda.is_available():
-            raise RuntimeError("No GPU found. A GPU is needed to quantize model.")
+            raise RuntimeError("No cuda gpu or cpu support using Intel/IPEX found. A gpu or avx512 enabled cpu with Intel/IPEX is required for quantization.")
 
         if self.sym == False and not is_gptqmodel_available():
-            raise ValueError("sym=False is not supported with auto-gptq. Please use gptqmodel instead: `pip install gptqmodel`")
+            raise ValueError("Asymmetric sym=False quantization is not supported with auto-gptq. Please use gptqmodel: `pip install gptqmodel`")
 
         if self.checkpoint_format == "gptq_v2" and not is_gptqmodel_available():
-            raise ValueError("gptq_v2 format is not supported with auto-gptq. Please use gptqmodel instead: `pip install gptqmodel`")
+            raise ValueError("gptq_v2 format only supported with gptqmodel. Please install gptqmodel: `pip install gptqmodel`")
 
         model.eval()
 
-        # If using gptqmodel, default format is gptq_v2 for sym=False compatibility
-        if is_gptqmodel_available() and self.backend != BACKEND.IPEX:
+        # gptqmodel internal is gptq_v2 for asym support, gptq(v1) can only support sym=True
+        if is_gptqmodel_available() and self.checkpoint_format != "gptq_v2" and self.backend != BACKEND.IPEX:
             self.checkpoint_format = "gptq_v2"
 
         # For Transformer model
