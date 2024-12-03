@@ -33,7 +33,6 @@ from .constants import GPTQ_CONFIG
 from .data import get_dataset, prepare_dataset
 from .utils import get_block_name_with_pattern, get_device, get_layers, get_preceding_modules, get_seqlen
 
-
 if is_accelerate_available():
     from accelerate import (
         cpu_offload_with_hook,
@@ -47,7 +46,6 @@ if is_auto_gptq_available():
     from auto_gptq.quantization import GPTQ
     from auto_gptq.utils.import_utils import dynamically_import_QuantLinear as hf_select_quant_linear
 
-
 if is_gptqmodel_available():
     from gptqmodel import exllama_set_max_input_length, BACKEND
     from gptqmodel.quantization import GPTQ
@@ -55,7 +53,6 @@ if is_gptqmodel_available():
     from gptqmodel.utils.model import gptqmodel_post_init as gptq_post_init
 
 logger = getLogger(__name__)
-
 
 if not is_gptqmodel_available():
     logger.warning("auto_gptq will be deprecated in the future, please `pip install gptqmodel` for gptq model")
@@ -76,27 +73,28 @@ class GPTQQuantizer(object):
     """
 
     def __init__(
-        self,
-        bits: int,
-        dataset: Optional[Union[List[str], str]] = None,
-        group_size: int = 128,
-        damp_percent: float = 0.1,
-        desc_act: bool = False,
-        sym: bool = True,
-        true_sequential: bool = True,
-        use_cuda_fp16: bool = False,
-        model_seqlen: Optional[int] = None,
-        block_name_to_quantize: Optional[str] = None,
-        module_name_preceding_first_block: Optional[List[str]] = None,
-        batch_size: int = 1,
-        pad_token_id: Optional[int] = None,
-        disable_exllama: bool = False,
-        exllama_config: Dict[str, Any] = None,
-        max_input_length: Optional[int] = None,
-        cache_block_outputs: Optional[bool] = True,
-        modules_in_block_to_quantize: Optional[List[List[str]]] = None,
-        *args,
-        **kwargs,
+            self,
+            bits: int,
+            dataset: Optional[Union[List[str], str]] = None,
+            group_size: int = 128,
+            damp_percent: float = 0.1,
+            desc_act: bool = False,
+            sym: bool = True,
+            true_sequential: bool = True,
+            use_cuda_fp16: bool = False,
+            checkpoint_format: str = "gptq",
+            model_seqlen: Optional[int] = None,
+            block_name_to_quantize: Optional[str] = None,
+            module_name_preceding_first_block: Optional[List[str]] = None,
+            batch_size: int = 1,
+            pad_token_id: Optional[int] = None,
+            disable_exllama: bool = False,
+            exllama_config: Dict[str, Any] = None,
+            max_input_length: Optional[int] = None,
+            cache_block_outputs: Optional[bool] = True,
+            modules_in_block_to_quantize: Optional[List[List[str]]] = None,
+            *args,
+            **kwargs,
     ):
         """
         Args:
@@ -167,6 +165,7 @@ class GPTQQuantizer(object):
         self.quant_method = QuantizationMethod.GPTQ
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
+        self.checkpoint_format = checkpoint_format
 
         self.serialization_keys = [
             "bits",
@@ -178,6 +177,7 @@ class GPTQQuantizer(object):
             "true_sequential",
             "quant_method",
             "modules_in_block_to_quantize",
+            "checkpoint_format",
         ]
 
         if self.bits not in [2, 3, 4, 8]:
@@ -205,7 +205,7 @@ class GPTQQuantizer(object):
                 bits=self.bits,
                 group_size=self.group_size,
                 desc_act=self.desc_act,
-                sym=self.sym, 
+                sym=self.sym,
                 pack=pack,
                 backend=self.backend,
             )
@@ -227,8 +227,6 @@ class GPTQQuantizer(object):
         for key in self.serialization_keys:
             gptq_dict[key] = getattr(self, key)
 
-        # always save/pack to gptq_v1 format
-        gptq_dict["checkpoint_format"] = "gptq"
         return gptq_dict
 
     @classmethod
@@ -272,6 +270,7 @@ class GPTQQuantizer(object):
         self.select_quant_linear(pack=False)
 
         self._replace_by_quant_layers(model, layers_to_be_replaced)
+
         return model
 
     def quantize_preprocess(self, model, **kwargs):
@@ -282,7 +281,7 @@ class GPTQQuantizer(object):
             self.backend = BACKEND.AUTO
             if kwargs.get("device_map") is not None and kwargs.get("device_map") != "auto":
                 device_map = kwargs.get("device_map")
-                devices =  [device_map] if isinstance(device_map, str) else list(device_map.values())
+                devices = [device_map] if isinstance(device_map, str) else list(device_map.values())
                 if "cpu" in devices or torch.device("cpu") in devices:
                     self.backend = BACKEND.IPEX
 
@@ -390,13 +389,17 @@ class GPTQQuantizer(object):
             )
 
         gptq_supports_cpu = (
-            is_auto_gptq_available()
-            and version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
-        ) or is_gptqmodel_available()
+                                    is_auto_gptq_available()
+                                    and version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
+                            ) or is_gptqmodel_available()
         if not gptq_supports_cpu and not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed to quantize model.")
 
         model.eval()
+
+        # If using gptqmodel, default format is gptq_v2 for sym=False compatibility
+        if is_gptqmodel_available() and self.backend != BACKEND.IPEX:
+            self.checkpoint_format = "gptq_v2"
 
         # For Transformer model
         has_config = False
@@ -656,6 +659,11 @@ class GPTQQuantizer(object):
         # Step 5: Any post-initialization that require device information, for example buffers initialization on device.
         model = self.post_init_model(model)
 
+        # for compatibility, always save in gptq_v1 format
+        if is_gptqmodel_available() and self.checkpoint_format == "gptq_v2" and self.backend != BACKEND.IPEX:
+            from gptqmodel.utils.model import convert_gptq_v2_to_v1_format
+            model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
+
         torch.cuda.empty_cache()
         if hasattr(torch, "xpu"):
             torch.xpu.empty_cache()
@@ -682,33 +690,26 @@ class GPTQQuantizer(object):
         class StoreAttr(object):
             pass
 
+        if is_gptqmodel_available() and self.checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
+            from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
+            model = convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear)
+
         model.quantize_config = StoreAttr()
-        model.quantize_config.bits = self.bits
         model.quantize_config.desc_act = self.desc_act
-        if is_gptqmodel_available() and hasattr(model.config, "quantization_config"):
-            quantization_config = model.config.quantization_config
-            checkpoint_format = quantization_config.checkpoint_format if isinstance(model.config.quantization_config, GPTQConfig) else quantization_config.get("checkpoint_format")
-            if checkpoint_format is None:
-                checkpoint_format = "gptq" # default checkpoint_format for both gptqmodel and auto-gptq(main)
-            if checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
-                from gptqmodel.utils.model import convert_gptq_v1_to_v2_format
-                model = convert_gptq_v1_to_v2_format(model, model.quantize_config, self.quant_linear)
-
-
         model = gptq_post_init(model, use_act_order=self.desc_act)
         if (
-            self.desc_act
-            and (not self.disable_exllama and self.exllama_version == ExllamaVersion.ONE)
-            and self.max_input_length is not None
+                self.desc_act
+                and (not self.disable_exllama and self.exllama_version == ExllamaVersion.ONE)
+                and self.max_input_length is not None
         ):
             model = exllama_set_max_input_length(model, self.max_input_length)
         return model
 
     def pack_model(
-        self,
-        model: nn.Module,
-        device: torch.device,
-        quantizers: Dict[str, Tuple],
+            self,
+            model: nn.Module,
+            device: torch.device,
+            quantizers: Dict[str, Tuple],
     ):
         """
         Pack the model by replacing the layers by quantized layers
