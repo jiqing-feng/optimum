@@ -395,6 +395,9 @@ class GPTQQuantizer(object):
         if not gptq_supports_cpu and not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed to quantize model.")
 
+        if self.sym == False and not is_gptqmodel_available():
+            raise ValueError("sym=False is not supported with auto-gptq. Please use gptqmodel instead: `pip install gptqmodel`")
+
         model.eval()
 
         # If using gptqmodel, default format is gptq_v2 for sym=False compatibility
