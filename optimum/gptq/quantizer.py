@@ -667,7 +667,8 @@ class GPTQQuantizer(object):
         model = self.post_init_model(model)
 
         # convert gptqmodel internal gptq_v2 format to v1 for saving/compat
-        if self.checkpoint_format == "gptq_v2":
+        # if sym=False, need to use gptq_v2 format for avoid loading errors
+        if self.sym != False and self.checkpoint_format == "gptq_v2":
             from gptqmodel.utils.model import convert_gptq_v2_to_v1_format
             model = convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
             self.checkpoint_format = "gptq"
