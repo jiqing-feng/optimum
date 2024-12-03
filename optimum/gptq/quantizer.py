@@ -243,7 +243,7 @@ class GPTQQuantizer(object):
         """
         return cls(**config_dict)
 
-    def convert_model(self, model: nn.Module, **kwargs):
+    def convert_model(self, model: nn.Module):
         """
         Convert the model to a GPTQ model by getting and replacing the layers.
 
@@ -252,8 +252,6 @@ class GPTQQuantizer(object):
                 Model to be converted
 
         """
-        self.select_gptqmodel_backend(kwargs)
-
         if self.block_name_to_quantize is None:
             self.block_name_to_quantize = get_block_name_with_pattern(model)
         block_name = self.block_name_to_quantize
@@ -405,7 +403,7 @@ class GPTQQuantizer(object):
         model.eval()
 
         # gptqmodel internal is gptq_v2 for asym support, gptq(v1) can only support sym=True
-        if is_gptqmodel_available() and self.checkpoint_format != "gptq_v2" and self.backend != BACKEND.IPEX:
+        if is_gptqmodel_available() and self.checkpoint_format != "gptq_v2":
             self.checkpoint_format = "gptq_v2"
 
         # For Transformer model
@@ -655,7 +653,7 @@ class GPTQQuantizer(object):
                 )
                 self.disable_exllama = True
         # Step 4: Pack the model at the end (Replacing the layers)
-        self.pack_model(model=model, device=device, quantizers=quantizers)
+        self.pack_model(model=model, quantizers=quantizers)
 
         model.is_quantized = True
         model.quantization_method = QuantizationMethod.GPTQ
@@ -699,7 +697,7 @@ class GPTQQuantizer(object):
         class StoreAttr(object):
             pass
 
-        if is_gptqmodel_available() and self.checkpoint_format == "gptq" and self.backend != BACKEND.IPEX:
+        if is_gptqmodel_available() and self.checkpoint_format == "gptq":
             from gptqmodel.utils.model import hf_convert_gptq_v1_to_v2_format
             model = convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear)
 
@@ -717,7 +715,6 @@ class GPTQQuantizer(object):
     def pack_model(
             self,
             model: nn.Module,
-            device: torch.device,
             quantizers: Dict[str, Tuple],
     ):
         """
@@ -877,7 +874,7 @@ def load_quantized_model(
     quantizer.exllama_version = quantizer.exllama_config["version"]
     quantizer.max_input_length = max_input_length
 
-    model = quantizer.convert_model(model, device_map=device_map)
+    model = quantizer.convert_model(model)
 
     if no_split_module_classes is None:
         no_split_module_classes = quantizer.get_no_split_module_classes(model)
