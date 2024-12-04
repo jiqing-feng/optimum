@@ -122,10 +122,8 @@ class GPTQQuantizer(object):
             checkpoint_format (`str`, *optional*, defaults to `gptq`):
                 GPTQ weight format. `gptq`(v1) is supported by both gptqmodel and auto-gptq. `gptq_v2` is gptqmodel only.
             meta (`Dict[str, any]`, *optional*):
-                Properties that do not directly contributes to quantization or quant inference should be placed in meta.
-                i.e. quantizer tool (producer) + version, timestamp, entity who made the quant, etc
-            use_cuda_fp16 (`bool`, defaults to `False`):
-                Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
+                Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
+                i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
             model_seqlen (`Optional[int]`, defaults to `None`):
                 The maximum sequence length that the model can take.
             block_name_to_quantize (`Optional[str]`, defaults to `None`):
@@ -236,18 +234,13 @@ class GPTQQuantizer(object):
         for key in self.serialization_keys:
             gptq_dict[key] = getattr(self, key)
 
-        if gptq_dict.get("meta") is None:
-            gptq_dict["meta"] = {}
-        meta = gptq_dict["meta"]
-        if meta.get("quantizer") is None:
-            meta["quantizer"] = [f"optimum:{optimum_version}"]
-
-            if is_gptqmodel_available():
+        if is_gptqmodel_available():
+            if gptq_dict.get("meta") is None:
+                gptq_dict["meta"] = {}
+            meta = gptq_dict["meta"]
+            if meta.get("quantizer") is None:
                 from gptqmodel.version import __version__ as gptqmodel_version
-                meta["quantizer"].append(f"gptqmodel:{gptqmodel_version}")
-            elif is_auto_gptq_available():
-                from auto_gptq import __version__ as autogptq_version
-                meta["quantizer"].append(f"auto_gptq:{autogptq_version}")
+                meta["quantizer"] = [f"gptqmodel:{gptqmodel_version}", f"optimum:{optimum_version}"]
 
         return gptq_dict
 
