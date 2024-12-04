@@ -242,6 +242,7 @@ class GPTQQuantizer(object):
             gptq_dict["meta"] = {}
             
         meta = gptq_dict["meta"]
+        # store both optimum:version and gptq_lib:version into quantize_config.meta.quantizer
         if meta.get("quantizer") is None:
             meta["quantizer"] = [f"optimum:{optimum_version}"]
 
