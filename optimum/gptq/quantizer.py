@@ -124,8 +124,8 @@ class GPTQQuantizer(object):
             checkpoint_format (`str`, *optional*, defaults to `gptq`):
                 GPTQ weight format. `gptq`(v1) is supported by both gptqmodel and auto-gptq. `gptq_v2` is gptqmodel only.
             meta (`Dict[str, any]`, *optional*):
-                Properties that do not directly contributes to quantization or quant inference should be placed in meta.
-                i.e. quantizer tool (producer) + version, timestamp, entity who made the quant, etc
+                Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
+                i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
             model_seqlen (`Optional[int]`, defaults to `None`):
                 The maximum sequence length that the model can take.
             block_name_to_quantize (`Optional[str]`, defaults to `None`):
