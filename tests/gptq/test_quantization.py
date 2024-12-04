@@ -73,6 +73,7 @@ class GPTQTest(unittest.TestCase):
         """
 
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.config = AutoConfig.from_pretrained(cls.model_name)
 
         cls.model_fp16 = AutoModelForCausalLM.from_pretrained(
             cls.model_name, torch_dtype=torch.float16, device_map=cls.device_map_for_quantization
@@ -116,6 +117,12 @@ class GPTQTest(unittest.TestCase):
         """
 
         if is_gptqmodel_available():
+            if hasattr(self.config, "quantization_config"):
+                checkpoint_format = self.config.quantization_config.get("checkpoint_format")
+                meta = self.config.quantization_config.get("meta")
+            else:
+                checkpoint_format = "gptq"
+                meta = None
             QuantLinear = hf_select_quant_linear(
                 bits=self.bits,
                 group_size=self.group_size,
@@ -123,6 +130,8 @@ class GPTQTest(unittest.TestCase):
                 sym=True,
                 device_map=self.device_map_for_quantization,
                 pack=False,
+                checkpoint_format=checkpoint_format,
+                meta=meta,
             )
         else:
             QuantLinear = hf_select_quant_linear(

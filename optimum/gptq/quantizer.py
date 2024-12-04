@@ -218,6 +218,7 @@ class GPTQQuantizer(object):
                 sym=self.sym,
                 device_map=device_map,
                 pack=pack,
+                checkpoint_format=self.checkpoint_format,
                 meta=self.meta,
             )
         else:
