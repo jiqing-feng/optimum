@@ -296,6 +296,9 @@ class GPTQTestExllamav2(GPTQTestCUDA):
         """
         Test the serialization of the model and the loading of the quantized weights with exllamav2 kernel
         """
+        if is_gptqmodel_available():
+            # gptqmodel.hf_select_quant_linear() now does not select ExllamaV2
+            return
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantizer.save(self.quantized_model, tmpdirname)
@@ -310,16 +313,13 @@ class GPTQTestExllamav2(GPTQTestCUDA):
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
 
             # transformers and auto-gptq compatibility
             # quantized models are more compatible with device map than
             # device context managers (they're never used in transformers testing suite)
             _ = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map={"": self.device_for_inference})
-            if is_gptqmodel_available():
-                _ = GPTQModel.load(tmpdirname, device_map={"": self.device_for_inference})
-            else:
-                _ = AutoGPTQForCausalLM.from_quantized(tmpdirname, device_map={"": self.device_for_inference})
+            _ = AutoGPTQForCausalLM.from_quantized(tmpdirname, device_map={"": self.device_for_inference})
 
 
 class GPTQTestNoBlockCaching(GPTQTestCUDA):
