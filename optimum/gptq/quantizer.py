@@ -169,9 +169,6 @@ class GPTQQuantizer(object):
         self.checkpoint_format = checkpoint_format
         self.meta = meta
 
-        print("self.checkpoint_format",self.checkpoint_format)
-        print("self.meta",self.meta)
-
         self.serialization_keys = [
             "bits",
             "dataset",
