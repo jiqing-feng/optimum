@@ -690,8 +690,10 @@ class GPTQQuantizer(object):
         # Step 5: Any post-initialization that require device information, for example buffers initialization on device.
         model = self.post_init_model(model)
 
-        # convert gptqmodel internal gptq_v2 format to v1 for saving/compat
-        # sym=False is valid for gptq_v2 format only. for sym=True, need to convert to v1 before save.
+        # TODO: move this quantizer.save() since this breaks Peft train post quantization
+        # convert gptqmodel internal gptq_v2 format to v1 for saving for max compat
+        # note: sym=False is valid for gptq_v2 for all gptqmodel and gptq(v1) for gptqmodel >= `0.9.0`
+        # only allow sym=False to saved in gptq_v2
         if self.sym and self.checkpoint_format == "gptq_v2":
             model = hf_convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
             self.checkpoint_format = "gptq"
