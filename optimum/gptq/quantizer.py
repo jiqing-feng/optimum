@@ -240,6 +240,7 @@ class GPTQQuantizer(object):
 
         if gptq_dict.get("meta") is None:
             gptq_dict["meta"] = {}
+            
         meta = gptq_dict["meta"]
         if meta.get("quantizer") is None:
             meta["quantizer"] = [f"optimum:{optimum_version}"]
