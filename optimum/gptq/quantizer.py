@@ -209,7 +209,7 @@ class GPTQQuantizer(object):
                 )
         self.exllama_version = self.exllama_config["version"]
 
-    def select_quant_linear(self, pack: bool, device_map: Union[str, dict]):
+    def select_quant_linear(self, device_map: Union[str, dict]):
         if is_gptqmodel_available():
             self.quant_linear = hf_select_quant_linear(
                 bits=self.bits,
@@ -217,7 +217,6 @@ class GPTQQuantizer(object):
                 desc_act=self.desc_act,
                 sym=self.sym,
                 device_map=device_map,
-                pack=pack,
                 checkpoint_format=self.checkpoint_format,
                 meta=self.meta,
             )
@@ -290,7 +289,7 @@ class GPTQQuantizer(object):
                     )
                     del layers_to_be_replaced[name]
 
-        self.select_quant_linear(pack=False, device_map=kwargs.get("device_map", None))
+        self.select_quant_linear(device_map=kwargs.get("device_map", None))
 
         self._replace_by_quant_layers(model, layers_to_be_replaced)
 
@@ -748,7 +747,7 @@ class GPTQQuantizer(object):
         layers = get_layers(model)
         layers = {n: layers[n] for n in quantizers}
 
-        self.select_quant_linear(pack=True, device_map=model.hf_device_map)
+        self.select_quant_linear(device_map=model.hf_device_map)
 
         self._replace_by_quant_layers(model, quantizers)
         qlayers = get_layers(model, [self.quant_linear])

@@ -131,7 +131,6 @@ class GPTQTest(unittest.TestCase):
                 desc_act=self.desc_act,
                 sym=self.sym,
                 device_map=self.device_map_for_quantization,
-                pack=True,
                 checkpoint_format=checkpoint_format,
                 meta=meta,
             )
@@ -172,7 +171,7 @@ class GPTQTest(unittest.TestCase):
             if is_auto_gptq_available() and not is_gptqmodel_available():
                 quant_type = "cuda-old" if self.disable_exllama else "exllama"
             else:
-                quant_type = "ipex" if self.device_map_for_quantization == "cpu" else "exllamav2"
+                quant_type = "ipex" if self.device_map_for_quantization == "cpu" else "exllama"
 
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
 
@@ -205,6 +204,11 @@ class GPTQTestCUDA(GPTQTest):
         self.assertEqual(int(self.quantized_ppl), self.expected_quantized_perplexity)
 
 
+class GPTQTestExllama(GPTQTestCUDA):
+    disable_exllama = False
+    exllama_config = {"version": 1}
+
+
 class GPTQTestActOrder(GPTQTestCUDA):
     disable_exllama = True
     desc_act = True
@@ -233,7 +237,7 @@ class GPTQTestActOrder(GPTQTestCUDA):
                 device_map={"": self.device_for_inference},
                 exllama_config={"version": 2},
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
 
             # transformers and auto-gptq compatibility
             # quantized models are more compatible with device map than
@@ -261,15 +265,17 @@ class GPTQTestActOrder(GPTQTestCUDA):
                 empty_model,
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
-                exllama_config={"version": 2},
+                exllama_config={"version": 1},
                 max_input_length=4028,
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
 
             prompt = "I am in Paris and" * 1000
             inp = self.tokenizer(prompt, return_tensors="pt").to(0)
             self.assertTrue(inp["input_ids"].shape[1] > 4028)
-            quantized_model_from_saved.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+            with self.assertRaises(RuntimeError) as cm:
+                quantized_model_from_saved.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
+                self.assertTrue("temp_state buffer is too small" in str(cm.exception))
 
             prompt = "I am in Paris and" * 500
             inp = self.tokenizer(prompt, return_tensors="pt").to(0)
@@ -304,7 +310,7 @@ class GPTQTestExllamav2(GPTQTestCUDA):
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
 
             # transformers and auto-gptq compatibility
             # quantized models are more compatible with device map than
