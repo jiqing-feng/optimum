@@ -32,6 +32,7 @@ from ..utils.modeling_utils import recurse_getattr
 from .constants import GPTQ_CONFIG
 from .data import get_dataset, prepare_dataset
 from .utils import get_block_name_with_pattern, get_device, get_layers, get_preceding_modules, get_seqlen
+from ..version import __version__ as optimum_version
 
 
 if is_accelerate_available():
@@ -82,13 +83,14 @@ class GPTQQuantizer(object):
         true_sequential: bool = True,
         use_cuda_fp16: bool = False,
         checkpoint_format: str = "gptq",
+        meta: Optional[Dict[str, str]] = None,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
         disable_exllama: bool = False,
-        exllama_config: Dict[str, Any] = None,
+        exllama_config: Optional[Dict[str, Any]] = None,
         max_input_length: Optional[int] = None,
         cache_block_outputs: Optional[bool] = True,
         modules_in_block_to_quantize: Optional[List[List[str]]] = None,
@@ -165,6 +167,10 @@ class GPTQQuantizer(object):
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.checkpoint_format = checkpoint_format
+        self.meta = meta
+
+        print("self.checkpoint_format",self.checkpoint_format)
+        print("self.meta",self.meta)
 
         self.serialization_keys = [
             "bits",
@@ -177,6 +183,7 @@ class GPTQQuantizer(object):
             "quant_method",
             "modules_in_block_to_quantize",
             "checkpoint_format",
+            "meta",
         ]
 
         if self.bits not in [2, 3, 4, 8]:
@@ -207,6 +214,7 @@ class GPTQQuantizer(object):
                 sym=self.sym,
                 device_map=device_map,
                 pack=pack,
+                meta=self.meta,
             )
         else:
             self.quant_linear = hf_select_quant_linear(
@@ -225,6 +233,19 @@ class GPTQQuantizer(object):
         gptq_dict = {}
         for key in self.serialization_keys:
             gptq_dict[key] = getattr(self, key)
+
+        if gptq_dict.get("meta") is None:
+            gptq_dict["meta"] = {}
+
+        meta = gptq_dict["meta"]
+        if meta.get("optimum") is None:
+            meta["optimum"] = f"optimum:{optimum_version}"
+
+        if is_gptqmodel_available():
+            if meta.get("quantizer") is None:
+                from gptqmodel.version import __version__ as gptqmodel_version
+                meta["quantizer"] = f"gptqmodel:{gptqmodel_version}"
+
         return gptq_dict
 
     @classmethod
