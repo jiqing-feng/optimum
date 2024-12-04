@@ -716,8 +716,8 @@ class GPTQQuantizer(object):
         class StoreAttr(object):
             pass
 
-        if is_gptqmodel_available() and self.checkpoint_format == "gptq":
-            model = hf_convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear)
+        if is_gptqmodel_available():
+            model, _ = hf_convert_gptq_v1_to_v2_format(model, self.bits, self.quant_linear, self.checkpoint_format, self.meta)
 
         model.quantize_config = StoreAttr()
         model.quantize_config.desc_act = self.desc_act
