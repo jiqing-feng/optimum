@@ -47,6 +47,7 @@ if is_auto_gptq_available():
     from auto_gptq.modeling._utils import autogptq_post_init as gptq_post_init
     from auto_gptq.quantization import GPTQ
     from auto_gptq.utils.import_utils import dynamically_import_QuantLinear as hf_select_quant_linear
+    from auto_gptq import __version__ as autogptq_version
 
 if is_gptqmodel_available():
     from gptqmodel import exllama_set_max_input_length
@@ -54,6 +55,7 @@ if is_gptqmodel_available():
     from gptqmodel.utils.importer import hf_select_quant_linear
     from gptqmodel.utils.model import hf_convert_gptq_v1_to_v2_format, hf_convert_gptq_v2_to_v1_format
     from gptqmodel.utils.model import hf_gptqmodel_post_init as gptq_post_init
+    from gptqmodel.version import __version__ as gptqmodel_version
 
 logger = getLogger(__name__)
 
@@ -243,10 +245,8 @@ class GPTQQuantizer(object):
             meta["quantizer"] = [f"optimum:{optimum_version}"]
 
             if is_gptqmodel_available():
-                from gptqmodel.version import __version__ as gptqmodel_version
                 meta["quantizer"].append(f"gptqmodel:{gptqmodel_version}")
             elif is_auto_gptq_available():
-                from auto_gptq import __version__ as autogptq_version
                 meta["quantizer"].append(f"auto_gptq:{autogptq_version}")
 
         return gptq_dict
