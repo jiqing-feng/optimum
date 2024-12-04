@@ -690,14 +690,6 @@ class GPTQQuantizer(object):
         # Step 5: Any post-initialization that require device information, for example buffers initialization on device.
         model = self.post_init_model(model)
 
-        # TODO: move this quantizer.save() since this breaks Peft train post quantization
-        # convert gptqmodel internal gptq_v2 format to v1 for saving for max compat
-        # note: sym=False is valid for gptq_v2 for all gptqmodel and gptq(v1) for gptqmodel >= `0.9.0`
-        # only allow sym=False to saved in gptq_v2
-        if self.sym and self.checkpoint_format == "gptq_v2":
-            model = hf_convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
-            self.checkpoint_format = "gptq"
-
         torch.cuda.empty_cache()
         if hasattr(torch, "xpu"):
             torch.xpu.empty_cache()
@@ -794,6 +786,14 @@ class GPTQQuantizer(object):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
 
         """
+        # TODO: move this to model.save_pretrained()
+        # convert gptqmodel internal gptq_v2 format to v1 for saving for max compat
+        # note: sym=False is valid for gptq_v2 for all gptqmodel and gptq(v1) for gptqmodel >= `0.9.0`
+        # only allow sym=False to saved in gptq_v2
+        if self.sym and self.checkpoint_format == "gptq_v2":
+            model = hf_convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
+            self.checkpoint_format = "gptq"
+
         os.makedirs(save_dir, exist_ok=True)
         model.save_pretrained(save_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
         with open(os.path.join(save_dir, GPTQ_CONFIG), "w", encoding="utf-8") as f:
