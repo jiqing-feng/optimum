@@ -695,7 +695,7 @@ class GPTQQuantizer(object):
             torch.xpu.empty_cache()
         return model
 
-    def post_init_model(self, model, **kwargs):
+    def post_init_model(self, model):
         """
         Post-initialization that require device information, for example buffers initialization on device.
 
