@@ -898,7 +898,7 @@ def load_quantized_model(
     quantizer.exllama_version = quantizer.exllama_config["version"]
     quantizer.max_input_length = max_input_length
 
-    model = quantizer.convert_model(model)
+    model = quantizer.convert_model(model, device_map=device_map)
 
     if no_split_module_classes is None:
         no_split_module_classes = quantizer.get_no_split_module_classes(model)

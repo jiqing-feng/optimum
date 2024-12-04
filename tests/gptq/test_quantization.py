@@ -55,6 +55,7 @@ class GPTQTest(unittest.TestCase):
     bits = 4
     group_size = 128
     desc_act = False
+    sym = True
     disable_exllama = True
     exllama_config = None
     cache_block_outputs = True
@@ -88,6 +89,7 @@ class GPTQTest(unittest.TestCase):
             dataset=cls.dataset,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
+            sym=cls.sym,
             disable_exllama=cls.disable_exllama,
             exllama_config=cls.exllama_config,
             cache_block_outputs=cls.cache_block_outputs,
@@ -127,9 +129,9 @@ class GPTQTest(unittest.TestCase):
                 bits=self.bits,
                 group_size=self.group_size,
                 desc_act=self.desc_act,
-                sym=True,
+                sym=self.sym,
                 device_map=self.device_map_for_quantization,
-                pack=False,
+                pack=True,
                 checkpoint_format=checkpoint_format,
                 meta=meta,
             )
@@ -145,7 +147,7 @@ class GPTQTest(unittest.TestCase):
         self.assertTrue(self.quantized_model.model.layers[0].mlp.gate_proj.__class__ == QuantLinear)
 
     def check_quantized_layers_type(self, model, value):
-        self.assertTrue(model.model.layers[0].mlp.gate_proj.QUANT_TYPE == value)
+        self.assertEqual(model.model.layers[0].mlp.gate_proj.QUANT_TYPE, value)
 
     def test_serialization(self):
         """
@@ -170,7 +172,7 @@ class GPTQTest(unittest.TestCase):
             if is_auto_gptq_available() and not is_gptqmodel_available():
                 quant_type = "cuda-old" if self.disable_exllama else "exllama"
             else:
-                quant_type = "ipex" if self.device_map_for_quantization == "cpu" else "cuda"
+                quant_type = "ipex" if self.device_map_for_quantization == "cpu" else "exllamav2"
 
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
 
@@ -188,7 +190,10 @@ class GPTQTest(unittest.TestCase):
 class GPTQTestCUDA(GPTQTest):
     device_map_for_quantization = "cuda"
     device_for_inference = 0
-    expected_compression_ratio = 1.66
+    expected_compression_ratio = 1.2577
+    expected_fp16_perplexity = 38
+    expected_quantized_perplexity = 45
+
 
     def test_perplexity(self):
         """
@@ -200,14 +205,10 @@ class GPTQTestCUDA(GPTQTest):
         self.assertEqual(int(self.quantized_ppl), self.expected_quantized_perplexity)
 
 
-class GPTQTestExllama(GPTQTestCUDA):
-    disable_exllama = False
-    exllama_config = {"version": 1}
-
-
 class GPTQTestActOrder(GPTQTestCUDA):
     disable_exllama = True
     desc_act = True
+    expected_quantized_perplexity = 46
 
     def test_serialization(self):
         # act_order don't work with qlinear_cuda kernel
@@ -230,9 +231,9 @@ class GPTQTestActOrder(GPTQTestCUDA):
                 empty_model,
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
-                exllama_config={"version": 1},
+                exllama_config={"version": 2},
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
 
             # transformers and auto-gptq compatibility
             # quantized models are more compatible with device map than
@@ -260,17 +261,15 @@ class GPTQTestActOrder(GPTQTestCUDA):
                 empty_model,
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
-                exllama_config={"version": 1},
+                exllama_config={"version": 2},
                 max_input_length=4028,
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
 
             prompt = "I am in Paris and" * 1000
             inp = self.tokenizer(prompt, return_tensors="pt").to(0)
             self.assertTrue(inp["input_ids"].shape[1] > 4028)
-            with self.assertRaises(RuntimeError) as cm:
-                quantized_model_from_saved.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
-                self.assertTrue("temp_state buffer is too small" in str(cm.exception))
+            quantized_model_from_saved.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
 
             prompt = "I am in Paris and" * 500
             inp = self.tokenizer(prompt, return_tensors="pt").to(0)
@@ -327,7 +326,8 @@ class GPTQTestModuleQuant(GPTQTestCUDA):
         ["self_attn.q_proj"],
         ["mlp.gate_proj"],
     ]
-    expected_compression_ratio = 1.577
+    expected_compression_ratio = 1.068
+    expected_quantized_perplexity = 39
 
     def test_not_converted_layers(self):
         # self_attention.dense should not be converted
