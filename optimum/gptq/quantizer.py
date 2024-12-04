@@ -786,10 +786,9 @@ class GPTQQuantizer(object):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
 
         """
-        # TODO: move this to model.save_pretrained()
-        # convert gptqmodel internal gptq_v2 format to v1 for saving for max compat
+
+        # convert gptqmodel internal gptq_v2 format to v1 for max compatibility
         # note: sym=False is valid for gptq_v2 for all gptqmodel and gptq(v1) for gptqmodel >= `0.9.0`
-        # only allow sym=False to saved in gptq_v2
         if self.sym and self.checkpoint_format == "gptq_v2":
             model = hf_convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
             self.checkpoint_format = "gptq"
