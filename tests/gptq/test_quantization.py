@@ -235,7 +235,7 @@ class GPTQTestActOrder(GPTQTestCUDA):
                 empty_model,
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
-                exllama_config={"version": 2},
+                exllama_config={"version": 1},
             )
             self.check_quantized_layers_type(quantized_model_from_saved, "exllama")
 
