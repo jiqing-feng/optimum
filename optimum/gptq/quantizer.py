@@ -788,9 +788,8 @@ class GPTQQuantizer(object):
         """
 
         # convert gptqmodel internal gptq_v2 format to v1 for max compatibility
-        # note: sym=False is valid for gptq_v2 for all gptqmodel and gptq(v1) for gptqmodel >= `0.9.0`
-        if self.sym and self.checkpoint_format == "gptq_v2":
-            model = hf_convert_gptq_v2_to_v1_format(model, self.bits, self.quant_linear)
+        model, converted = hf_convert_gptq_v2_to_v1_format(model, self.sym, self.bits, self.quant_linear, self.checkpoint_format, self.meta)
+        if converted:
             self.checkpoint_format = "gptq"
 
         os.makedirs(save_dir, exist_ok=True)
