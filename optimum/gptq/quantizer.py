@@ -174,9 +174,9 @@ class GPTQQuantizer(object):
         self.quant_method = QuantizationMethod.GPTQ
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
-        self.checkpoint_format = checkpoint_format
+        self.checkpoint_format = checkpoint_format.lower()
         self.meta = meta
-        self.backend = backend
+        self.backend = backend.lower() if backend is not None else None
 
         self.serialization_keys = [
             "bits",
