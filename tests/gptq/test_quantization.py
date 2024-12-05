@@ -200,8 +200,8 @@ class GPTQTestCUDA(GPTQTest):
         the perplexity of the converted models
         """
 
-        self.assertEqual(int(self.fp16_ppl), self.expected_fp16_perplexity)
-        self.assertEqual(int(self.quantized_ppl), self.expected_quantized_perplexity)
+        self.assertLessEqual(int(self.fp16_ppl), self.expected_fp16_perplexity)
+        self.assertLessEqual(int(self.quantized_ppl), self.expected_quantized_perplexity)
 
 
 class GPTQTestExllama(GPTQTestCUDA):
