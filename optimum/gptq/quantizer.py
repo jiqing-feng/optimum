@@ -218,10 +218,10 @@ class GPTQQuantizer(object):
                 group_size=self.group_size,
                 desc_act=self.desc_act,
                 sym=self.sym,
-                device_map=device_map,
                 checkpoint_format=self.checkpoint_format,
-                backend=self.backend,
                 meta=self.meta,
+                device_map=device_map,
+                backend=self.backend,
             )
         else:
             self.quant_linear = hf_select_quant_linear(
