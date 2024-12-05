@@ -143,7 +143,7 @@ class GPTQTest(unittest.TestCase):
                 disable_exllama=self.disable_exllama or self.exllama_config["version"] != 1,
                 disable_exllamav2=self.disable_exllama or self.exllama_config["version"] != 2,
             )
-        self.assertTrue(self.quantized_model.model.layers[0].mlp.gate_proj.__class__ == QuantLinear)
+        self.assertEqual(self.quantized_model.model.layers[0].mlp.gate_proj.__class__, QuantLinear)
 
     def check_quantized_layers_type(self, model, value):
         self.assertEqual(model.model.layers[0].mlp.gate_proj.QUANT_TYPE, value)
@@ -296,10 +296,6 @@ class GPTQTestExllamav2(GPTQTestCUDA):
         """
         Test the serialization of the model and the loading of the quantized weights with exllamav2 kernel
         """
-        if is_gptqmodel_available():
-            # gptqmodel.hf_select_quant_linear() now does not select ExllamaV2
-            return
-
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantizer.save(self.quantized_model, tmpdirname)
             self.quantized_model.config.save_pretrained(tmpdirname)
@@ -313,7 +309,7 @@ class GPTQTestExllamav2(GPTQTestCUDA):
                 save_folder=tmpdirname,
                 device_map={"": self.device_for_inference},
             )
-            self.check_quantized_layers_type(quantized_model_from_saved, "exllamav2")
+            self.check_quantized_layers_type(quantized_model_from_saved, "exllama" if is_gptqmodel_available else "exllamav2")
 
             # transformers and auto-gptq compatibility
             # quantized models are more compatible with device map than
@@ -337,7 +333,7 @@ class GPTQTestModuleQuant(GPTQTestCUDA):
 
     def test_not_converted_layers(self):
         # self_attention.dense should not be converted
-        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.__class__.__name__ == "Linear")
+        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.__class__.__name__, "Linear")
 
 
 class GPTQUtilsTest(unittest.TestCase):
