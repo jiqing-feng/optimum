@@ -140,23 +140,23 @@ def is_datasets_available():
 
 def is_auto_gptq_available():
     if _auto_gptq_available:
-        version_autogptq = version.parse(importlib_metadata.version("auto_gptq"))
-        if version_autogptq >= AUTOGPTQ_MINIMUM_VERSION:
+        v = version.parse(importlib_metadata.version("auto_gptq"))
+        if v >= AUTOGPTQ_MINIMUM_VERSION:
             return True
         else:
             raise ImportError(
-                f"Found an incompatible version of auto-gptq. Found version {version_autogptq}, but only version >= {AUTOGPTQ_MINIMUM_VERSION} are supported"
+                f"Found an incompatible version of auto-gptq. Found version {v}, but only version >= {AUTOGPTQ_MINIMUM_VERSION} are supported"
             )
 
 
 def is_gptqmodel_available():
     if _gptqmodel_available:
-        version_gptqmodel = version.parse(importlib_metadata.version("gptqmodel"))
-        if version_gptqmodel >= GPTQMODEL_MINIMUM_VERSION:
+        v = version.parse(importlib_metadata.version("gptqmodel"))
+        if v >= GPTQMODEL_MINIMUM_VERSION:
             return True
         else:
             raise ImportError(
-                f"Found an incompatible version of gptqmodel. Found version {version_gptqmodel}, but only version >= {GPTQMODEL_MINIMUM_VERSION} are supported"
+                f"Found an incompatible version of gptqmodel. Found version {v}, but only version >= {GPTQMODEL_MINIMUM_VERSION} are supported"
             )
 
 
