@@ -84,6 +84,7 @@ class GPTQQuantizer(object):
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
+        backend: Optional[str] = None,
         meta: Optional[Dict[str, any]] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
@@ -175,6 +176,7 @@ class GPTQQuantizer(object):
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.checkpoint_format = checkpoint_format
         self.meta = meta
+        self.backend = backend
 
         self.serialization_keys = [
             "bits",
@@ -218,6 +220,7 @@ class GPTQQuantizer(object):
                 sym=self.sym,
                 device_map=device_map,
                 checkpoint_format=self.checkpoint_format,
+                backend=self.backend,
                 meta=self.meta,
             )
         else:
