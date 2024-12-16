@@ -32,8 +32,8 @@ from ..utils.modeling_utils import recurse_getattr
 from ..version import __version__ as optimum_version
 from .constants import GPTQ_CONFIG
 from .data import get_dataset, prepare_dataset
-from .utils import get_block_name_with_pattern, get_device, get_layers, get_preceding_modules, get_seqlen
-
+from .utils import get_block_name_with_pattern, get_device, get_layers, get_preceding_modules, get_seqlen, \
+    nested_move_to_device, move_to_device
 
 if is_accelerate_available():
     from accelerate import (
@@ -521,18 +521,20 @@ class GPTQQuantizer(object):
                 module = module.to(to_device)
             blocks[0] = blocks[0].to(to_device)
 
+        cur_layer_device = get_device(blocks[0])
+
         def store_input_hook(_, input, *args):
             kwargs = args[0]
             if input is None:
                 if "hidden_states" in kwargs:
-                    input = (kwargs["hidden_states"],)
+                    input = (move_to_device(kwargs["hidden_states"], cur_layer_device),)
                 else:
                     raise ValueError("No input value found in the foward pass")
             layer_inputs.append(input)
             other_kwargs = {}
             for k, v in kwargs.items():  # make sure other arguments also be captured
                 if k not in ["hidden_states"]:
-                    other_kwargs[k] = v
+                    other_kwargs[k] = nested_move_to_device(v, cur_layer_device)
             layer_input_kwargs.append(other_kwargs)
             raise ValueError
 
@@ -540,11 +542,7 @@ class GPTQQuantizer(object):
             handle = blocks[0].register_forward_pre_hook(store_input_hook, with_kwargs=True)
             for data in dataset:
                 for k, v in data.items():
-                    # put the data on gpu, we won't put them back to cpu
-                    if (not has_device_map or device.type == "cpu") and has_device_more_than_cpu():
-                        data[k] = v.to(0)
-                    else:
-                        data[k] = v.to(device)
+                    data[k] = move_to_device(v, cur_layer_device)
                 try:
                     model(**data)
                 except ValueError:
@@ -571,11 +569,7 @@ class GPTQQuantizer(object):
                 handle = block.register_forward_pre_hook(store_input_hook, with_kwargs=True)
                 for data in dataset:
                     for k, v in data.items():
-                        # put the data on gpu, we won't put them back to cpu
-                        if (not has_device_map or device.type == "cpu") and has_device_more_than_cpu():
-                            data[k] = v.to(0)
-                        else:
-                            data[k] = v.to(device)
+                        data[k] = move_to_device(v, cur_layer_device)
                     try:
                         model(**data)
                     except ValueError:
