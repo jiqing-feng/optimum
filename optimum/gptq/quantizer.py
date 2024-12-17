@@ -32,7 +32,14 @@ from ..utils.modeling_utils import recurse_getattr
 from ..version import __version__ as optimum_version
 from .constants import GPTQ_CONFIG
 from .data import get_dataset, prepare_dataset
-from .utils import get_block_name_with_pattern, get_device, get_layers, get_preceding_modules, get_seqlen, nested_move_to
+from .utils import (
+    get_block_name_with_pattern,
+    get_device,
+    get_layers,
+    get_preceding_modules,
+    get_seqlen,
+    nested_move_to,
+)
 
 
 if is_accelerate_available():
